@@ -104,6 +104,9 @@ clusterGroup:
       namespace: qtodo
       project: hub
       path: charts/qtodo
+      overrides:
+        - name: app.oidc.enabled
+          value: "true"
 
 
 
