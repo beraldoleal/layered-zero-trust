@@ -63,3 +63,4 @@ spec:
         - name: QUARKUS_HIBERNATE_ORM_DATABASE_GENERATION
           value: 'drop-and-create'
         resources: {}
+        serviceAccountName: qtodo
