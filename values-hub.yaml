@@ -107,6 +107,8 @@ clusterGroup:
       overrides:
         - name: app.oidc.enabled
           value: "true"
+        - name: app.spire.enabled
+          value: "true"
 
 
 

@@ -17,6 +17,11 @@ app:
     applicationType: "web-app"
     authenticatedPaths: "/*"
     authenticatedPolicy: "authenticated"
+  
+  spire:
+    enabled: false
+    audiences:
+      - qtodo
 
 # PostgreSQL database configuration
 postgresql:
