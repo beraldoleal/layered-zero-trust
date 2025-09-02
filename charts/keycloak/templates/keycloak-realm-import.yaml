@@ -17,5 +17,14 @@ spec:
   keycloakCRName: keycloak
   realm:
 {{- toYaml . | nindent 4 }}
+  placeholders:
+    QTODO_ADMIN_PASSWORD:
+      secret:
+        name: {{ $.Values.keycloak.users.secretName }}
+        key: qtodo-admin-password
+    QTODO_USER1_PASSWORD:
+      secret:
+        name: {{ $.Values.keycloak.users.secretName }}
+        key: qtodo-user1-password
 {{- end }}
 {{- end }}

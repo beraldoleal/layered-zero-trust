@@ -23,6 +23,10 @@ keycloak:
     database: keycloak
     passwordVaultKey: secret/data/global/keycloak
 
+  users:
+    secretName: keycloak-users
+    passwordVaultKey: secret/data/global/keycloak-users
+
   # Toggle to enable/disable default realm configuration
   defaultConfig: true
   # Default realm configuration
@@ -51,7 +55,7 @@ keycloak:
         lastName: "Admin"
         credentials:
           - type: "password"
-            value: "rDlobaGjL2"
+            value: "${QTODO_ADMIN_PASSWORD}"
             temporary: true
         realmRoles:
           - "qtodo-admin"
@@ -66,7 +70,7 @@ keycloak:
         lastName: "User-1"
         credentials:
           - type: "password"
-            value: "LuOSkWDb0P"
+            value: "${QTODO_USER1_PASSWORD}"
             temporary: true
         realmRoles:
           - "viewer"
