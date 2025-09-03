@@ -71,6 +71,8 @@ fi
 oc patch csv -n zero-trust-workload-identity-manager zero-trust-workload-identity-manager.v0.1.0 --type='json' \
   -p='[{"op": "replace", "path": "/spec/install/spec/deployments/0/spec/replicas", "value": 0}]'
 
+until [ "$(oc get pods -n zero-trust-workload-identity-manager -l app.kubernetes.io/component=manager -o go-template='{{ len .items }}')" -eq 0 ]; do sleep 5; done
+
 # Update the spire-server configuration
 if [ "$(oc get cm spire-server -n zero-trust-workload-identity-manager -o jsonpath='{ .data.server\.conf }' | jq -r '.server.jwt_issuer')" != "${oidc_url}" ]; then
     oc get cm spire-server -n zero-trust-workload-identity-manager -o jsonpath='{ .data.server\.conf }'\
@@ -86,4 +88,4 @@ if [ "$(oc get cm spire-server -n zero-trust-workload-identity-manager -o jsonpa
 fi
 
 # Wait for the ZTWIM pods to be ready
-oc wait -n zero-trust-workload-identity-manager --for=condition=Ready pod --all &>/dev/null
+oc wait -n zero-trust-workload-identity-manager --for=condition=Ready pod --all --timeout=300s &>/dev/null
