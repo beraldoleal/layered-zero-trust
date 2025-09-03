@@ -135,6 +135,7 @@ token-kubeconfig: ## Create a local ~/.kube/config with password (not usually ne
 
 .PHONY: vault-config-jwt
 vault-config-jwt: ## Configure Vault JWT authentication
+	common/scripts/ztwim-tp1-patch.sh
 	common/scripts/vault-utils.sh vault_jwt $(NAME)
 
 
