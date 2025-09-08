@@ -78,6 +78,13 @@ clusterGroup:
   #   - '/overrides/values-{{ $.Values.global.hubClusterDomain }}.yaml'
   #   - '/overrides/values-{{ $.Values.global.localClusterDomain }}.yaml'
   applications:
+    compliance-scanning:
+      name: compliance-scanning
+      namespace: openshift-compliance
+      annotations:
+        argocd.argoproj.io/sync-wave: '-30'
+      project: hub
+      path: charts/compliance-scanning
     vault:
       name: vault
       namespace: vault
