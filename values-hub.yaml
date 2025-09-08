@@ -45,7 +45,7 @@ clusterGroup:
     zero-trust-workload-identity-manager:
       name: openshift-zero-trust-workload-identity-manager
       namespace: zero-trust-workload-identity-manager
-      channel: tech-preview-v0.1
+      channel: tech-preview-v0.2
       catalogSource: redhat-marketplace
     compliance-operator:
       name: compliance-operator

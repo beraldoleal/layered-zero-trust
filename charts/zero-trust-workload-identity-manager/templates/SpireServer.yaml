@@ -17,6 +17,4 @@ spec:
     maxOpenConns: {{ .Values.spire.server.datastore.maxOpenConns }} 
     maxIdleConns: {{ .Values.spire.server.datastore.maxIdleConns }}
     connMaxLifetime: {{ .Values.spire.server.datastore.connMaxLifetime }}
-  {{- if .Values.spire.jwtIssuer }}
-  jwtIssuer: {{ .Values.spire.jwtIssuer }}
-  {{- end }}
+  jwtIssuer: {{ include "zero-trust-workload-identity-manager.jwtIssuer" . }}

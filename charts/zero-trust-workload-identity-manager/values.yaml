@@ -9,7 +9,6 @@ spiffe:
 spire:
   trustDomain: "{{ .Values.global.localClusterDomain }}"
   clusterName: "cluster"
-  jwtIssuer: ""
 
   agent:
     nodeAttestor:
@@ -24,10 +23,10 @@ spire:
   oidcDiscoveryProvider:
     agentSocketName: "spire-agent.sock"
     ingress:
-      enabled: true
+      operatorManaged: "false"
       annotations:
-        route.openshift.io/termination: passthrough
-      host: "oidc-discovery.{{ .Values.global.localClusterDomain }}"
+        route.openshift.io/termination: reencrypt
+      host: "spire-spiffe-oidc-discovery-provider.{{ .Values.global.localClusterDomain }}"
     service:
       name: spire-spiffe-oidc-discovery-provider
       port: 443

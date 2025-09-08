@@ -5,6 +5,5 @@ metadata:
 spec:
   trustDomain: {{ tpl .Values.spire.trustDomain $ }}
   agentSocketName: {{ .Values.spire.oidcDiscoveryProvider.agentSocketName }}
-  {{- if .Values.spire.jwtIssuer }}
-  jwtIssuer: {{ .Values.spire.jwtIssuer }}
-  {{- end }}
+  jwtIssuer: {{ include "zero-trust-workload-identity-manager.jwtIssuer" . }}
+  managedRoute: {{ (.Values.spire.oidcDiscoveryProvider.ingress.operatorManaged | default false) | quote }}

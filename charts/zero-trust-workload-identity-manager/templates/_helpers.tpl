@@ -75,3 +75,10 @@ hostPath: {{ .Values.spire.server.persistence.hostPath }}
 {{- end }}
 type: {{ .Values.spire.server.persistence.type }}
 {{- end }}
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "zero-trust-workload-identity-manager.jwtIssuer" -}}
+{{- printf "https://%s" (tpl .Values.spire.oidcDiscoveryProvider.ingress.host $) }}
+{{- end }}
