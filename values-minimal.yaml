@@ -1,7 +1,7 @@
 # Minimal install: cert-manager + SPIRE (ZT Workload Identity Manager)
 
 main:
-  clusterGroupName: coco-spire-site
+  clusterGroupName: minimal
 
 # Required workaround for ZT-WIM OIDC DP route (from values-hub.yaml)
 spire:
@@ -13,7 +13,7 @@ spire:
         route.openshift.io/destination-ca-certificate-secret: spire-bundle
 
 clusterGroup:
-  name: coco-spire-site
+  name: minimal
   isHubCluster: true
   namespaces:
     - cert-manager
@@ -37,20 +37,20 @@ clusterGroup:
       catalogSource: redhat-marketplace
 
   projects:
-    - coco-spire-project
+    - minimal-project
 
   applications:
     rh-cert-manager:
       name: rh-cert-manager
       namespace: cert-manager-operator
-      project: coco-spire-project
+      project: minimal-project
       path: charts/certmanager
 
     zero-trust-workload-identity-manager:
       name: zero-trust-workload-identity-manager
       namespace: zero-trust-workload-identity-manager
-      project: coco-spire-project
+      project: minimal-project
       path: charts/zero-trust-workload-identity-manager
       overrides:
         - name: spire.clusterName
-          value: coco-spire-site
+          value: minimal
