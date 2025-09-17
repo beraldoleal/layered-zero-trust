@@ -6,15 +6,12 @@ spire:
       annotations:
         route.openshift.io/termination: reencrypt
         route.openshift.io/destination-ca-certificate-secret: spire-bundle
-
 clusterGroup:
   name: hub
   isHubCluster: true
   namespaces:
     - open-cluster-management
-    - vault
     - qtodo
-    - golang-external-secrets
     - keycloak-system:
         operatorGroup: true
         targetNamespace: keycloak-system
@@ -22,7 +19,6 @@ clusterGroup:
     - cert-manager-operator:
         operatorGroup: true
         targetNamespace: cert-manager-operator
-
     - zero-trust-workload-identity-manager:
         operatorGroup: true
         targetNamespace: zero-trust-workload-identity-manager
@@ -85,29 +81,6 @@ clusterGroup:
         argocd.argoproj.io/sync-wave: '-30'
       project: hub
       path: charts/compliance-scanning
-    vault:
-      name: vault
-      namespace: vault
-      project: hub
-      chart: hashicorp-vault
-      chartVersion: 0.1.*
-      jwt:
-        enabled: true
-        oidcDiscoveryUrl: https://spire-spiffe-oidc-discovery-provider.zero-trust-workload-identity-manager.svc.cluster.local
-        oidcDiscoveryCa: /run/secrets/kubernetes.io/serviceaccount/service-ca.crt
-        defaultRole: qtodo
-        roles:
-          - name: qtodo
-            audience: qtodo
-            subject: spiffe://apps.{{ $.Values.global.clusterDomain }}/ns/qtodo/sa/qtodo
-            policies:
-              - global-secret
-    golang-external-secrets:
-      name: golang-external-secrets
-      namespace: golang-external-secrets
-      project: hub
-      chart: golang-external-secrets
-      chartVersion: 0.1.*
     rh-keycloak:
       name: rh-keycloak
       namespace: keycloak-system
@@ -142,9 +115,6 @@ clusterGroup:
           value: qtodo
         - name: app.vault.secretPath
           value: secret/data/global/qtodo
-
-
-
   imperative:
     # NOTE: We *must* use lists and not hashes. As hashes lose ordering once parsed by helm
     # The default schedule is every 10 minutes: imperative.schedule
@@ -154,40 +124,40 @@ clusterGroup:
     # https://hybrid-cloud-patterns.io/imperative-actions/#additional-job-customizations
     jobs: []
   managedClusterGroups: {}
-    # exampleRegion:
-    #   name: group-one
-    #   acmlabels:
-    #     - name: clusterGroup
-    #       value: group-one
-    #   helmOverrides:
-    #     - name: clusterGroup.isHubCluster
-    #       value: false
-          # Before enabling cluster provisioning, ensure AWS and/or Azure
-          #   credentials and OCP pull secrets are defined in Vault.
-          #   See values-secret.yaml.template
-          #
-          #clusterPools:
-          #  exampleAWSPool:
-          #    name: aws-ap
-          #    openshiftVersion: 4.10.18
-          #    baseDomain: blueprints.rhecoeng.com
-          #    platform:
-          #      aws:
-          #        region: ap-southeast-2
-          #    clusters:
-          #    - One
-          #
-          #  exampleAzurePool:
-          #    name: azure-us
-          #    openshiftVersion: 4.10.18
-          #    baseDomain: blueprints.rhecoeng.com
-          #    platform:
-          #      azure:
-          #        baseDomainResourceGroupName: dojo-dns-zones
-          #        region: eastus
-          #    clusters:
-          #    - Two
-          #    - Three
+  # exampleRegion:
+  #   name: group-one
+  #   acmlabels:
+  #     - name: clusterGroup
+  #       value: group-one
+  #   helmOverrides:
+  #     - name: clusterGroup.isHubCluster
+  #       value: false
+  # Before enabling cluster provisioning, ensure AWS and/or Azure
+  #   credentials and OCP pull secrets are defined in Vault.
+  #   See values-secret.yaml.template
+  #
+  #clusterPools:
+  #  exampleAWSPool:
+  #    name: aws-ap
+  #    openshiftVersion: 4.10.18
+  #    baseDomain: blueprints.rhecoeng.com
+  #    platform:
+  #      aws:
+  #        region: ap-southeast-2
+  #    clusters:
+  #    - One
+  #
+  #  exampleAzurePool:
+  #    name: azure-us
+  #    openshiftVersion: 4.10.18
+  #    baseDomain: blueprints.rhecoeng.com
+  #    platform:
+  #      azure:
+  #        baseDomainResourceGroupName: dojo-dns-zones
+  #        region: eastus
+  #    clusters:
+  #    - Two
+  #    - Three
 #  To have apps in multiple flavors, use namespaces and use helm overrides as appropriate
 #
 #    pipelines:
@@ -221,7 +191,6 @@ clusterGroup:
 #      path: path/to/myapp
 #      repoURL: https://github.com/vendor/applications.git
 #      targetRevision: main
-
 #  managedSites:
 #    factory:
 #      name: factory

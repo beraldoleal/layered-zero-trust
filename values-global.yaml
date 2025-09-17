@@ -5,6 +5,8 @@ global:
     useCSV: false
     syncPolicy: Automatic
     installPlanApproval: Automatic
+  secretStore:
+    backend: none
 main:
   clusterGroupName: hub
   multiSourceConfig:
