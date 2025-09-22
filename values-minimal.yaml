@@ -54,3 +54,5 @@ clusterGroup:
       overrides:
         - name: spire.clusterName
           value: minimal
+        - name: spire.agent.experimental.useSyncAuthorizedEntries
+          value: false
