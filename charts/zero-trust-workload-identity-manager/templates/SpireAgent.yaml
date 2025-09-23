@@ -11,6 +11,10 @@ spec:
     k8sEnabled: {{ .Values.spire.agent.workloadAttestors.k8sEnabled | quote }}
     workloadAttestorsVerification:
       type: {{ .Values.spire.agent.workloadAttestors.workloadAttestorsVerification.type}}
+{{- if .Values.spire.agent.nodeSelector }}
+  nodeSelector:
+    {{- toYaml .Values.spire.agent.nodeSelector | nindent 4 }}
+{{- end }}
 {{- if .Values.spire.agent.experimental }}
   experimental:
     useSyncAuthorizedEntries: {{ .Values.spire.agent.experimental.useSyncAuthorizedEntries }}
