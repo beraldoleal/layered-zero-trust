@@ -9,6 +9,7 @@ spec:
     k8sPSATEnabled: {{ .Values.spire.agent.nodeAttestor.k8sPSATEnabled | quote }}
   workloadAttestors:
     k8sEnabled: {{ .Values.spire.agent.workloadAttestors.k8sEnabled | quote }}
+    unixEnabled: {{ .Values.spire.agent.workloadAttestors.unixEnabled | quote }}
     workloadAttestorsVerification:
       type: {{ .Values.spire.agent.workloadAttestors.workloadAttestorsVerification.type}}
 {{- if .Values.spire.agent.nodeSelector }}

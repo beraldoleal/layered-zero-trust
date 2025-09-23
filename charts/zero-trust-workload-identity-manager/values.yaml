@@ -15,6 +15,7 @@ spire:
       k8sPSATEnabled: "true"
     workloadAttestors:
       k8sEnabled: "true"
+      unixEnabled: "true"
       workloadAttestorsVerification:
         type: "auto"
         hostCertBasePath: /var/lib/kubelet/pki
