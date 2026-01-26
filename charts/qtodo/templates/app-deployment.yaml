@@ -5,6 +5,7 @@ metadata:
     argocd.argoproj.io/sync-wave: '20'
   labels:
     app: qtodo
+    ztvp.io/uses-certificates: "true"
   name: qtodo
   namespace: qtodo
 spec:
@@ -17,7 +18,7 @@ spec:
     metadata:
       annotations:
         checksum/app-configmap-envvars: {{ include (print $.Template.BasePath "/app-config-env.yaml") . | sha256sum }}
-{{- if eq .Values.app.spire.enabled true }}
+{{- if .Values.app.spire.enabled }}
         checksum/app-spiffe-helper-config: {{ include (print $.Template.BasePath "/spiffe-helper-config.yaml") . | sha256sum }}
         checksum/app-spiffe-vault-client-config: {{ include (print $.Template.BasePath "/spiffe-vault-client-config.yaml") . | sha256sum }}
 {{- end }}
@@ -26,8 +27,66 @@ spec:
         deployment: qtodo
       name: qtodo
     spec:
-{{- if eq .Values.app.spire.enabled true }}
+{{- if .Values.app.spire.enabled }}
       initContainers:
+{{- if .Values.app.truststore.enabled }}
+      - name: init-ca-truststore
+        image: registry.redhat.io/ubi9/openjdk-17:latest
+        imagePullPolicy: IfNotPresent
+        command:
+          - java
+          - /usr/local/bin/qtodo-truststore.java
+        env:
+          - name: CA_BUNDLE
+            value: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+          - name: TRUSTSTORE_PATH
+            value: /run/secrets/truststore/truststore.p12
+          - name: TRUSTSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: qtodo-truststore-secret
+                key: truststore-password
+        volumeMounts:
+          - name: ztvp-trusted-ca
+            mountPath: /etc/pki/ca-trust/extracted/pem
+            readOnly: true
+          - name: truststore
+            mountPath: /run/secrets/truststore
+          - name: qtodo-truststore-java
+            mountPath: /usr/local/bin
+{{- end }}
+      - name: wait-for-keycloak
+        image: registry.redhat.io/openshift4/ose-tools-rhel9:latest
+        imagePullPolicy: IfNotPresent
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "Waiting for Keycloak OIDC endpoint to be available..."
+            KEYCLOAK_URL="{{ default (printf "https://keycloak.%s/realms/ztvp/.well-known/openid-configuration" .Values.global.localClusterDomain) .Values.app.oidc.authServerUrl }}/.well-known/openid-configuration"
+            # Remove duplicate .well-known if authServerUrl already contains realm
+            KEYCLOAK_URL=$(echo "$KEYCLOAK_URL" | sed 's|/.well-known/openid-configuration/.well-known/openid-configuration|/.well-known/openid-configuration|')
+            
+            MAX_RETRIES=60
+            RETRY_INTERVAL=5
+            RETRY_COUNT=0
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              if curl -sf --cacert /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem "$KEYCLOAK_URL" > /dev/null 2>&1; then
+                echo "Keycloak is available!"
+                exit 0
+              fi
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "Keycloak not ready yet (attempt $RETRY_COUNT/$MAX_RETRIES). Retrying in ${RETRY_INTERVAL}s..."
+              sleep $RETRY_INTERVAL
+            done
+            
+            echo "WARNING: Keycloak not available after $MAX_RETRIES attempts. Continuing anyway..."
+            exit 0
+        volumeMounts:
+          - name: ztvp-trusted-ca
+            mountPath: /etc/pki/ca-trust/extracted/pem
+            readOnly: true
       - name: init-spiffe-helper
         image: {{ template "qtodo.image" .Values.app.images.spiffeHelper }}
         imagePullPolicy: {{ .Values.app.images.spiffeHelper.pullPolicy }}
@@ -65,6 +124,8 @@ spec:
             value: /run/secrets/db-credentials/credentials.properties
           - name: JWT_TOKEN_FILE
             value: /svids/jwt.token
+          - name: ZTVP_CA_BUNDLE
+            value: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
         volumeMounts:
           - name: svids
             mountPath: /svids
@@ -72,6 +133,9 @@ spec:
             mountPath: /run/secrets/db-credentials
           - name: spiffe-vault-client
             mountPath: /opt/app-root/src
+          - name: ztvp-trusted-ca
+            mountPath: /etc/pki/ca-trust/extracted/pem
+            readOnly: true
 {{- end }}
       containers:
 {{- if and .Values.app.spire.enabled .Values.app.spire.sidecars }}
@@ -113,6 +177,8 @@ spec:
           value: /run/secrets/db-credentials/credentials.properties
         - name: JWT_TOKEN_FILE
           value: /svids/jwt.token
+        - name: ZTVP_CA_BUNDLE
+          value: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
         volumeMounts:
         - name: svids
           mountPath: /svids
@@ -121,6 +187,9 @@ spec:
           mountPath: /run/secrets/db-credentials
         - name: spiffe-vault-client
           mountPath: /opt/app-root/src
+          readOnly: true
+        - name: ztvp-trusted-ca
+          mountPath: /etc/pki/ca-trust/extracted/pem
           readOnly: true
 {{- end }}
       - name: qtodo
@@ -149,9 +218,9 @@ spec:
           value: '0.0.0.0'
         - name: QUARKUS_HTTP_PORT
           value: '8080'
-        - name: QUARKUS_HIBERNATE_ORM_DATABASE_GENERATION
+        - name: QUARKUS_HIBERNATE_ORM_SCHEMA_MANAGEMENT_STRATEGY
           value: 'drop-and-create'
-{{- if eq .Values.app.spire.enabled false }}
+{{- if not .Values.app.spire.enabled }}
         - name: QUARKUS_DATASOURCE_USERNAME
           valueFrom:
             secretKeyRef:
@@ -170,15 +239,35 @@ spec:
             secretKeyRef:
               name: oidc-client-secret
               key: client-secret
+{{- if .Values.app.truststore.enabled }}
+        # Truststore password from Vault secret
+        - name: TRUSTSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: qtodo-truststore-secret
+              key: truststore-password
+        # JVM-level truststore configuration for all SSL connections (PKCS12 format)
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Djavax.net.ssl.trustStore=/run/secrets/truststore/truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=$(TRUSTSTORE_PASSWORD)"
 {{- end }}
-{{- if eq .Values.app.spire.enabled true }}
+{{- end }}
+{{- if .Values.app.spire.enabled }}
         volumeMounts:
           - name: db-credentials
             mountPath: /run/secrets/db-credentials
+{{- if .Values.app.truststore.enabled }}
+          - name: truststore
+            mountPath: /run/secrets/truststore
+            readOnly: true
+{{- end }}
+          # Mount ZTVP CA bundle for non-Java tools (curl, openssl, etc.)
+          - name: ztvp-trusted-ca
+            mountPath: /etc/pki/ca-trust/extracted/pem
+            readOnly: true
 {{- end }}
         resources: {}
       serviceAccountName: qtodo
-{{- if eq .Values.app.spire.enabled true }}
+{{- if .Values.app.spire.enabled }}
       volumes:
         - name: spiffe-helper-config
           configMap:
@@ -195,4 +284,15 @@ spec:
         - name: spiffe-vault-client
           configMap:
             name: spiffe-vault-client
+        - name: ztvp-trusted-ca
+          configMap:
+            name: ztvp-trusted-ca
+            defaultMode: 420
+{{- if .Values.app.truststore.enabled }}
+        - name: truststore
+          emptyDir: {}
+        - name: qtodo-truststore-java
+          configMap:
+            name: qtodo-truststore-java
+{{- end }}
 {{- end }}

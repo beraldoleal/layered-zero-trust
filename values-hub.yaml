@@ -156,6 +156,61 @@ clusterGroup:
   #   - '/overrides/values-{{ $.Values.global.hubClusterDomain }}.yaml'
   #   - '/overrides/values-{{ $.Values.global.localClusterDomain }}.yaml'
   applications:
+    ztvp-certificates:
+      name: ztvp-certificates
+      namespace: openshift-config
+      project: hub
+      path: charts/ztvp-certificates
+      annotations:
+        argocd.argoproj.io/sync-wave: "-10"
+      # Ignore the ACM-replicated policy in local-cluster namespace
+      # ACM automatically creates policy replicas with name pattern: <source-ns>.<policy-name>
+      ignoreDifferences:
+        - group: policy.open-cluster-management.io
+          kind: Policy
+          name: openshift-config.ztvp-certificates-distribution
+          namespace: local-cluster
+          jsonPointers:
+            - /
+      # Use extraValueFiles for complex nested structures like additionalCertificates
+      # The validated patterns framework only processes 'overrides' as --set parameters
+      # Edit /overrides/values-ztvp-certificates.yaml to configure:
+      #   - Additional CA certificates (additionalCertificates array)
+      #   - Automatic rollout restart for consuming applications
+      extraValueFiles:
+        - /overrides/values-ztvp-certificates.yaml
+      overrides:
+        # Disable Job TTL to prevent ArgoCD OutOfSync when Kubernetes deletes completed Jobs
+        # The initial Job runs once during first sync; CronJob handles ongoing extraction
+        - name: debug.keepFailedJobs
+          value: "true"
+        
+        # Enable verbose logging for troubleshooting (uncomment if needed)
+        # - name: debug.verbose
+        #   value: "true"
+        
+        # Primary custom CA: Use secretRef to reference an existing Kubernetes secret containing CA certificates
+        # Uncomment to add a primary custom CA:
+        # Single cert: oc create secret generic custom-ca-bundle --from-file=ca.crt=/path/to/ca.crt -n openshift-config
+        # Multiple certs: cat corp-root.crt intermediate.crt partner.crt > combined-ca.crt && oc create secret generic custom-ca-bundle --from-file=ca.crt=combined-ca.crt -n openshift-config
+        # Disabled for now - using auto-detection only
+        # - name: customCA.secretRef.enabled
+        #   value: "true"
+        - name: customCA.secretRef.name
+          value: custom-ca-bundle
+        - name: customCA.secretRef.namespace
+          value: openshift-config
+        - name: customCA.secretRef.key
+          value: ca.crt
+        
+        # Automatic rollout configuration (simple overrides work fine)
+        - name: rollout.enabled
+          value: "true"
+        - name: rollout.strategy
+          value: labeled
+        
+        # Note: additionalCertificates (complex nested array) temporarily disabled
+        # Need to find proper way to pass complex structures in Validated Patterns
     acm:
       name: acm
       namespace: open-cluster-management
