@@ -6,7 +6,9 @@ global:
     syncPolicy: Automatic
     installPlanApproval: Automatic
 main:
-  clusterGroupName: hub
+  clusterGroupName: coco-dev
+  gitOpsRepo: https://github.com/beraldoleal/layered-zero-trust
+  gitOpsBranch: lzt-osc-113-upgrade
   multiSourceConfig:
     enabled: true
     clusterGroupChartVersion: "0.9.*"
