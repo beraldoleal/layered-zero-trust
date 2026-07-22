@@ -17,6 +17,8 @@ global:
 
 kbs:
   secretResources:
+    - name: "kbsres1"
+      key: "secret/data/hub/kbsres1"
     - name: "passphrase"
       key: "secret/data/hub/passphrase"
   # SPIRE x509pop certificates per workload type

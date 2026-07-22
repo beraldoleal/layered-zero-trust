@@ -121,22 +121,15 @@ clusterGroup:
       source: redhat-operators
       channel: stable
       installPlanApproval: Manual
-      csv: sandboxed-containers-operator.v1.11.1
+      csv: sandboxed-containers-operator.v1.13.0
     trustee:
       name: trustee-operator
       namespace: trustee-operator-system
       source: redhat-operators
       channel: stable
       installPlanApproval: Manual
-      csv: trustee-operator.v1.0.0
+      csv: trustee-operator.v1.2.0
       config:
-        env:
-          - name: KBS_IMAGE_NAME
-            # trustee-operator v1.0.0 ships a KBS image that only validates
-            # AMD Milan VCEK certificates. This image includes the fix for
-            # Genoa (DCasv6). Remove once a new operator release ships the fix.
-            # See: https://github.com/confidential-containers/trustee/pull/1184
-            value: "quay.io/confidential-containers/trustee:v1.0.0-genoa-fix"
         resources:
           limits:
             cpu: 500m
@@ -336,7 +329,7 @@ clusterGroup:
       namespace: trustee-operator-system
       project: hub
       chart: trustee
-      chartVersion: 0.2.*
+      chartVersion: 0.9.*
       extraValueFiles:
         - /overrides/values-trustee.yaml
     sandbox:
@@ -362,7 +355,7 @@ clusterGroup:
       namespace: openshift-sandboxed-containers-operator
       project: hub
       chart: sandboxed-policies
-      chartVersion: 0.1.*
+      chartVersion: 0.3.*
       overrides:
         - name: global.coco.azure.defaultVMFlavour
           value: Standard_DC2as_v5
