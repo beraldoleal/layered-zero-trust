@@ -1,9 +1,6 @@
 # Override the default values for the trustee chart
 # This lists the secret resources that are uploaded to your chosen ESO backend (default: Vault).
 # It does not contain the secrets themselves, only references to Vault paths.
-#
-# NOTE: When adding new CoCo workloads to coco.workloads, you must also add
-# corresponding spire-cert-{workload} and spire-key-{workload} entries here
 
 # Secret store configuration for External Secrets Operator
 # Points to the ClusterSecretStore that knows how to connect to Vault
@@ -17,8 +14,29 @@ kbs:
       key: "secret/data/hub/kbsres1"
     - name: "passphrase"
       key: "secret/data/hub/passphrase"
-    # SPIRE x509pop certificates per workload type
-    - name: "spire-cert-qtodo"
-      key: "secret/data/pushsecrets/spire-cert-qtodo"
-    - name: "spire-key-qtodo"
-      key: "secret/data/pushsecrets/spire-key-qtodo"
+
+  # SPIRE Delegated Identity Plugin configuration
+  # KBS uses the admin socket to call SPIRE's Delegated Identity API on behalf of
+  # attested CoCo workloads. KBS itself must have a SPIRE workload entry and be
+  # listed as an authorized_delegate in the SpireAgent config.
+  spire:
+    enabled: true
+    # Path where the SPIRE agent admin socket is mounted inside the KBS pod.
+    # The actual host path (/run/spire/agent/sockets/csi.spiffe.io/admin) is
+    # mounted via extraVolumes below and symlinked by configure-spire-admin-socket.yaml.
+    adminSocketPath: "/run/spire/sockets/admin.sock"
+    attestedSelectorValue: "true"
+
+  # Mount the SPIRE agent admin socket from the host into the KBS pod.
+  # The admin socket is a Unix Domain Socket exposed by the SPIRE DaemonSet agent
+  # on each node. configure-spire-admin-socket.yaml enables this socket in the
+  # SpireAgent config. The KBS pod can run on any node since every node has an agent.
+  extraVolumes:
+    - name: spire-agent-admin-socket
+      hostPath:
+        path: "/run/spire/agent/sockets/csi.spiffe.io/admin"
+        type: "Directory"
+  extraVolumeMounts:
+    - name: spire-agent-admin-socket
+      mountPath: "/run/spire/sockets"
+      readOnly: false

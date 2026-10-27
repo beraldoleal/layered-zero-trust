@@ -1,0 +1,165 @@
+---
+# Configure SPIRE Agent to expose the Delegated Identity API admin socket
+# and authorize KBS as a trusted delegate.
+#
+# The SPIRE Delegated Identity API allows KBS to request SVIDs on behalf of
+# attested CoCo workloads. This requires:
+#   1. The admin socket to be enabled in the SpireAgent config.
+#   2. KBS's SPIFFE-ID listed as an authorized_delegate.
+#
+# The ZTWIM operator reconciles the SpireAgent DaemonSet. To prevent the operator
+# from reverting our admin socket config, we enable CREATE_ONLY_MODE=true on the
+# operator *after* patching. This is a global kill switch — temporarily disable it
+# when making intentional ZTWIM changes.
+#
+# After this playbook runs, the trustee deployment (which mounts the admin socket
+# via hostPath at /run/spire/agent/sockets/csi.spiffe.io/admin) will be able to
+# call the Delegated Identity API.
+
+- name: Configure SPIRE Agent admin socket for Delegated Identity API
+  become: false
+  connection: local
+  hosts: localhost
+  gather_facts: false
+  vars:
+    spire_namespace: "zero-trust-workload-identity-manager"
+    agent_configmap_name: "spire-agent"
+    agent_daemonset_name: "spire-agent"
+    # The SPIFFE-ID of the KBS workload entry (set by register-spire-entries.yaml)
+    # Format: spiffe://<trust_domain>/ns/trustee-operator-system/sa/trustee-sa
+    kbs_spiffe_id_prefix: "spiffe://"
+    admin_socket_dir: "/run/spire/agent/sockets/csi.spiffe.io/admin"
+    admin_socket_path: "{{ admin_socket_dir }}/admin.sock"
+
+  tasks:
+    - name: Get SpireServer CR to determine trust domain
+      kubernetes.core.k8s_info:
+        api_version: operator.openshift.io/v1alpha1
+        kind: SpireServer
+        name: cluster
+        namespace: "{{ spire_namespace }}"
+      register: spire_server_cr
+      retries: 30
+      delay: 10
+      until: spire_server_cr.resources | length > 0
+
+    - name: Extract trust domain from SpireServer CR
+      ansible.builtin.set_fact:
+        trust_domain: "{{ spire_server_cr.resources[0].spec.trustDomain }}"
+        cluster_name: "{{ spire_server_cr.resources[0].spec.clusterName }}"
+
+    - name: Display trust domain and cluster name
+      ansible.builtin.debug:
+        msg: "Trust domain: {{ trust_domain }}, Cluster: {{ cluster_name }}"
+
+    - name: Set KBS SPIFFE-ID (used as authorized_delegate)
+      ansible.builtin.set_fact:
+        kbs_spiffe_id: "spiffe://{{ trust_domain }}/ns/trustee-operator-system/sa/trustee-sa"
+
+    - name: Wait for SpireAgent ConfigMap
+      kubernetes.core.k8s_info:
+        kind: ConfigMap
+        namespace: "{{ spire_namespace }}"
+        name: "{{ agent_configmap_name }}"
+      register: agent_configmap
+      retries: 60
+      delay: 5
+      until: agent_configmap.resources | length > 0
+
+    - name: Parse agent configuration
+      ansible.builtin.set_fact:
+        agent_conf: "{{ agent_configmap.resources[0].data['agent.conf'] | from_json }}"
+
+    - name: Check if admin socket already configured
+      ansible.builtin.set_fact:
+        admin_already_configured: >-
+          {{ (agent_conf.plugins.KeyManager | default([]) |
+              selectattr('admin', 'defined') | list | length > 0) or
+             (agent_conf.admin_apis is defined) }}
+
+    - name: Display current configuration status
+      ansible.builtin.debug:
+        msg: "Admin socket already configured: {{ admin_already_configured }}"
+
+    - name: Add admin socket and authorized_delegate to agent config
+      when: not admin_already_configured
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ agent_configmap_name }}"
+            namespace: "{{ spire_namespace }}"
+          data:
+            agent.conf: |
+              {{ agent_conf | combine({
+                'admin_apis': [{'unix': {'socket_path': admin_socket_path}}],
+                'authorized_delegates': [kbs_spiffe_id]
+              }) | to_json(indent=2) }}
+
+    - name: Wait for SPIRE Agent DaemonSet pods to be Ready
+      kubernetes.core.k8s_info:
+        kind: DaemonSet
+        namespace: "{{ spire_namespace }}"
+        name: "{{ agent_daemonset_name }}"
+      register: agent_ds
+      retries: 30
+      delay: 10
+      until: >-
+        agent_ds.resources | length > 0 and
+        agent_ds.resources[0].status.numberReady | default(0) ==
+        agent_ds.resources[0].status.desiredNumberScheduled | default(1)
+
+    - name: Restart SPIRE Agent DaemonSet to pick up new config
+      when: not admin_already_configured
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: DaemonSet
+          metadata:
+            name: "{{ agent_daemonset_name }}"
+            namespace: "{{ spire_namespace }}"
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
+
+    - name: Enable CREATE_ONLY_MODE on ZTWIM operator to prevent revert
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: operators.coreos.com/v1alpha1
+          kind: Subscription
+          metadata:
+            name: openshift-zero-trust-workload-identity-manager
+            namespace: zero-trust-workload-identity-manager
+          spec:
+            config:
+              env:
+                - name: CREATE_ONLY_MODE
+                  value: "true"
+
+    - name: Wait for ZTWIM operator to restart with CREATE_ONLY_MODE
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ spire_namespace }}"
+        label_selectors:
+          - "app=zero-trust-workload-identity-manager"
+      register: ztwim_pods
+      retries: 30
+      delay: 10
+      until: >-
+        ztwim_pods.resources | length > 0 and
+        (ztwim_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0)
+
+    - name: Verify admin socket directory is accessible
+      kubernetes.core.k8s_exec:
+        namespace: "{{ spire_namespace }}"
+        pod: "{{ (agent_ds.resources[0].status | dict2items | first).value }}"
+        command: ["ls", "-la", "{{ admin_socket_dir }}"]
+      register: socket_check
+      ignore_errors: true
+
+    - name: Display socket check result
+      ansible.builtin.debug:
+        msg: "{{ socket_check.stdout | default('Could not check socket - pod exec may be restricted') }}"

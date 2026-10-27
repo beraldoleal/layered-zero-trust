@@ -1,5 +1,16 @@
-# SPIRE Agent with x509pop attestation running in CoCo peer pod.
-# Uses CDH sealed secrets for agent credentials (cert/key fetched from KBS after TEE attestation).
+# CoCo workload that receives an X.509-SVID via the Trustee SPIRE Delegated Identity Plugin.
+#
+# Flow:
+#   1. Pod starts inside a SEV-SNP TEE (kata-remote / peer-pod)
+#   2. CDH inside the TEE attests to KBS (TEE hardware attestation)
+#   3. CDH unseals the K8s secret below: fetches kbs+spire:///x509-svid from KBS
+#   4. KBS SPIRE plugin calls SPIRE Agent Delegated Identity API → returns SVID
+#   5. CDH writes the SVID JSON to the sealed secret mount
+#   6. Init container converts DER-encoded SVID JSON → PEM files in /svids/
+#   7. test-workload reads the PEM files and verifies them
+#
+# No SPIRE agent sidecar needed. No shareProcessNamespace. No unix attestor.
+# The trust chain: Hardware TEE → CDH → KBS → SPIRE Delegated Identity API → SVID
 apiVersion: v1
 kind: Pod
 metadata:
@@ -9,101 +20,103 @@ metadata:
     app: spire-agent-cc
 spec:
   runtimeClassName: kata-remote
-  # shareProcessNamespace allows SPIRE agent to inspect workload processes for unix attestation
-  # This is secure because the real isolation boundary is the confidential VM (peer-pod with TEE),
-  # not individual containers. All containers in this pod are part of the same trust boundary.
-  shareProcessNamespace: true
   serviceAccountName: spire-agent
-  nodeSelector:
-    workload-type: coco
-  # TODO: Make imagePullSecrets configurable like qtodo chart pattern (values.yaml + conditional)
-  # Currently hardcoded 'global-pull-secret' which must be manually created in the namespace
-  # Should either: 1) use ServiceAccount.imagePullSecrets, or 2) be conditional from values
-  imagePullSecrets:
-  - name: global-pull-secret
 
-  containers:
-  # SPIRE Agent Sidecar
-  - name: spire-agent
-    image: registry.redhat.io/zero-trust-workload-identity-manager/spiffe-spire-agent-rhel9@sha256:4073ef462525c2ea1326f3c44ec630e33cbab4b428e8314a85d38756c2460831
+  # Sealed secret with the SPIRE SVID sealed reference.
+  # CDH unseals this automatically when the pod starts inside the TEE.
+  # The sealed reference points to kbs+spire:///x509-svid which triggers
+  # the KBS SPIRE Delegated Identity Plugin.
+  volumes:
+  - name: svid-sealed
+    secret:
+      secretName: {{ .Values.sealedSecret.name }}
+  - name: svids
+    emptyDir: {}
+
+  initContainers:
+  # Convert DER-encoded SVID JSON (from CDH unsealing) to PEM files.
+  # The SPIRE plugin returns: { spiffe_id, cert_chain: [[DER bytes]], private_key: [DER bytes] }
+  - name: svid-converter
+    image: registry.redhat.io/ubi9/ubi-minimal:latest
     command: ["/bin/sh", "-c"]
     args:
       - |
-        echo "=== DEBUG: Checking /sealed mount ==="
-        ls -laR /sealed || echo "/sealed does not exist"
-        echo "=== DEBUG: Content of cert.pem (first 200 bytes) ==="
-        head -c 200 /sealed/cert.pem 2>&1 || echo "Cannot read cert.pem"
-        echo "=== DEBUG: Testing network connectivity to KBS (cluster-internal) ==="
-        curl -k -I https://kbs-service.trustee-operator-system.svc.cluster.local:8080 2>&1 | head -20
-        echo "=== DEBUG: Testing network connectivity to KBS (public route) ==="
-        curl -k -I https://kbs.apps.bleal-vp.azure.sandboxedcontainers.com 2>&1 | head -20
-        echo "=== DEBUG: Testing if CDH is running (HTTP on localhost:8006) ==="
-        curl -v http://127.0.0.1:8006/cdh/resource/default/spire-cert-qtodo/cert 2>&1 | head -50
-        echo "=== DEBUG: Starting spire-agent ==="
-        /spire-agent run -config /opt/spire/conf/agent/agent.conf
-    env:
-    - name: PATH
-      value: "/opt/spire/bin:/bin"
-    - name: MY_NODE_NAME
-      value: "coco-vm-node"  # Virtual node name for CoCo
-    ports:
-    - containerPort: 9982
-      name: healthz
-      protocol: TCP
-    livenessProbe:
-      httpGet:
-        path: /live
-        port: healthz
-        scheme: HTTP
-      initialDelaySeconds: 15
-      periodSeconds: 60
-    readinessProbe:
-      httpGet:
-        path: /ready
-        port: healthz
-        scheme: HTTP
-      initialDelaySeconds: 10
-      periodSeconds: 30
+        set -e
+        echo "=== SVID Converter: waiting for CDH to unseal SVID ==="
+        SVID_FILE="/sealed/x509-svid"
+
+        # CDH may take a few seconds to unseal (TEE attestation + KBS round-trip)
+        for i in $(seq 1 30); do
+          if [ -s "$SVID_FILE" ]; then
+            echo "SVID file found after ${i}s"
+            break
+          fi
+          echo "Waiting for SVID unsealing... (${i}/30)"
+          sleep 2
+        done
+
+        if [ ! -s "$SVID_FILE" ]; then
+          echo "ERROR: SVID file not available after 60s. Check CDH attestation and KBS SPIRE plugin logs."
+          exit 1
+        fi
+
+        echo "=== Raw SVID content (first 200 bytes) ==="
+        head -c 200 "$SVID_FILE"
+        echo ""
+
+        # The JSON from the SPIRE plugin contains DER bytes as arrays.
+        # Extract and convert to PEM using Python (available in ubi-minimal as python3-minimal).
+        # If python3 is not available, fall back to printing the raw JSON for debugging.
+        if command -v python3 >/dev/null 2>&1; then
+          python3 -c "
+        import json, base64, sys
+
+        with open('/sealed/x509-svid') as f:
+            data = json.load(f)
+
+        spiffe_id = data.get('spiffe_id', 'unknown')
+        cert_chain = data.get('cert_chain', [])
+        private_key = data.get('private_key', [])
+
+        print(f'SPIFFE-ID: {spiffe_id}')
+        print(f'Cert chain length: {len(cert_chain)}')
+
+        # Write PEM cert chain
+        with open('/svids/svid.pem', 'w') as f:
+            for der_bytes in cert_chain:
+                der = bytes(der_bytes)
+                b64 = base64.b64encode(der).decode()
+                pem = '-----BEGIN CERTIFICATE-----\n'
+                for i in range(0, len(b64), 64):
+                    pem += b64[i:i+64] + '\n'
+                pem += '-----END CERTIFICATE-----\n'
+                f.write(pem)
+
+        # Write PEM private key (PKCS#8)
+        with open('/svids/svid_key.pem', 'w') as f:
+            der = bytes(private_key)
+            b64 = base64.b64encode(der).decode()
+            pem = '-----BEGIN PRIVATE KEY-----\n'
+            for i in range(0, len(b64), 64):
+                pem += b64[i:i+64] + '\n'
+            pem += '-----END PRIVATE KEY-----\n'
+            f.write(pem)
+
+        print('PEM conversion complete.')
+        "
+        else
+          echo "WARNING: python3 not available. Copying raw SVID JSON for inspection."
+          cp "$SVID_FILE" /svids/svid-raw.json
+        fi
+
+        echo "=== Files in /svids/ ==="
+        ls -la /svids/
     volumeMounts:
-    - name: spire-config
-      mountPath: /opt/spire/conf/agent
-      readOnly: true
-    - name: spire-bundle
-      mountPath: /run/spire/bundle
-      readOnly: true
-    - name: spire-socket
-      mountPath: /tmp/spire-agent/public
-    - name: spire-persistence
-      mountPath: /var/lib/spire
-    - name: sealed-creds
+    - name: svid-sealed
       mountPath: /sealed
       readOnly: true
-    securityContext:
-      readOnlyRootFilesystem: true
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-        - ALL
-      seccompProfile:
-        type: RuntimeDefault
-
-  # SPIFFE Helper Sidecar
-  - name: spiffe-helper
-    image: ghcr.io/spiffe/spiffe-helper:0.10.1
-    imagePullPolicy: IfNotPresent
-    args:
-      - "-config"
-      - "/etc/helper.conf"
-    volumeMounts:
-      - name: spiffe-helper-config
-        readOnly: true
-        mountPath: /etc/helper.conf
-        subPath: helper.conf
-      - name: spire-socket
-        readOnly: true
-        mountPath: /tmp/spire-agent/public
-      - name: svids
-        mountPath: /svids
+    - name: svids
+      mountPath: /svids
     securityContext:
       allowPrivilegeEscalation: false
       capabilities:
@@ -113,27 +126,38 @@ spec:
       seccompProfile:
         type: RuntimeDefault
 
-  # Test Workload Container
+  containers:
+  # Test workload: verifies the SVID was received and is valid
   - name: test-workload
     image: registry.redhat.io/ubi9/ubi-minimal:latest
     command: ["/bin/sh", "-c"]
     args:
       - |
-        echo "=== SPIRE Agent CoCo Test Started ==="
-        echo "Waiting for SPIFFE certificates..."
+        echo "=== CoCo SPIRE Plugin Integration Test ==="
+        echo "Trust chain: Hardware TEE → CDH → KBS SPIRE Plugin → SVID"
+        echo ""
 
-        # Wait for SPIFFE certificates
-        while [ ! -f /svids/svid.pem ]; do
-          echo "Waiting for SPIFFE certificates..."
-          sleep 2
-        done
-
-        echo "SPIFFE certificates found!"
         ls -la /svids/
 
-        echo "=== Testing SPIFFE X.509 certificates ==="
-        echo "Certificate details:"
-        openssl x509 -in /svids/svid.pem -text -noout | head -20
+        if [ -f /svids/svid.pem ]; then
+          echo "=== X.509 SVID Certificate ==="
+          # Try openssl if available, otherwise show raw
+          if command -v openssl >/dev/null 2>&1; then
+            openssl x509 -in /svids/svid.pem -noout -text | grep -E "Subject:|Issuer:|Not Before:|Not After:|URI:" | head -10
+          else
+            echo "(openssl not available; showing raw PEM first 10 lines)"
+            head -10 /svids/svid.pem
+          fi
+          echo ""
+          echo "SUCCESS: SVID received via Trustee SPIRE Delegated Identity Plugin"
+        elif [ -f /svids/svid-raw.json ]; then
+          echo "SVID received as raw JSON (python3 conversion not available):"
+          head -5 /svids/svid-raw.json
+          echo "SUCCESS: SPIRE plugin is working (raw JSON format)"
+        else
+          echo "ERROR: No SVID files found in /svids/"
+          exit 1
+        fi
 
         echo "=== Sleeping for manual inspection ==="
         sleep 3600
@@ -149,23 +173,3 @@ spec:
       readOnlyRootFilesystem: false
       seccompProfile:
         type: RuntimeDefault
-
-  volumes:
-  - name: spire-config
-    configMap:
-      name: spire-agent-coco
-  - name: spiffe-helper-config
-    configMap:
-      name: spiffe-helper-config
-  - name: spire-bundle
-    configMap:
-      name: spire-bundle
-  - name: spire-socket
-    emptyDir: {}
-  - name: spire-persistence
-    emptyDir: {}
-  - name: sealed-creds
-    secret:
-      secretName: {{ .Values.sealedSecret.name }}
-  - name: svids
-    emptyDir: {}

@@ -1,0 +1,164 @@
+---
+# Register SPIRE workload entries for the CoCo + SPIRE plugin integration.
+#
+# Two entries are needed:
+#
+#   1. KBS entry: allows the KBS pod to call the SPIRE Delegated Identity API.
+#      The KBS SPIFFE-ID must match what was set as authorized_delegate in
+#      configure-spire-admin-socket.yaml.
+#      Attestation: k8s workload attestor (KBS runs as a regular k8s pod).
+#
+#   2. CoCo workload entry: the SPIFFE-ID that will be issued to hello-coco pods.
+#      Attestation: via KBS SPIRE plugin (delegated) using selectors derived from
+#      validated_identifiers in the attestation token (pod-image, pod-image-count, etc.)
+#      The parent is the KBS entry (delegated identity chain).
+#
+# This playbook is idempotent — entries are only created if they don't exist.
+
+- name: Register SPIRE entries for CoCo SPIRE plugin integration
+  become: false
+  connection: local
+  hosts: localhost
+  gather_facts: false
+  vars:
+    spire_namespace: "zero-trust-workload-identity-manager"
+    spire_server_pod_label: "app=spire-server"
+
+  tasks:
+    - name: Get SpireServer CR for trust domain
+      kubernetes.core.k8s_info:
+        api_version: operator.openshift.io/v1alpha1
+        kind: SpireServer
+        name: cluster
+        namespace: "{{ spire_namespace }}"
+      register: spire_server_cr
+      retries: 30
+      delay: 10
+      until: spire_server_cr.resources | length > 0
+
+    - name: Extract trust domain
+      ansible.builtin.set_fact:
+        trust_domain: "{{ spire_server_cr.resources[0].spec.trustDomain }}"
+
+    - name: Set SPIFFE IDs
+      ansible.builtin.set_fact:
+        kbs_spiffe_id: "spiffe://{{ trust_domain }}/ns/trustee-operator-system/sa/trustee-sa"
+        coco_workload_spiffe_id: "spiffe://{{ trust_domain }}/ns/zero-trust-workload-identity-manager/sa/hello-coco"
+
+    - name: Wait for SPIRE server pod
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ spire_namespace }}"
+        label_selectors:
+          - "{{ spire_server_pod_label }}"
+      register: spire_server_pods
+      retries: 30
+      delay: 10
+      until: >-
+        spire_server_pods.resources | length > 0 and
+        (spire_server_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0)
+
+    - name: Get SPIRE server pod name
+      ansible.builtin.set_fact:
+        spire_server_pod: >-
+          {{ (spire_server_pods.resources |
+              selectattr('status.phase', 'equalto', 'Running') |
+              list | first).metadata.name }}
+
+    - name: Check existing SPIRE entries
+      kubernetes.core.k8s_exec:
+        namespace: "{{ spire_namespace }}"
+        pod: "{{ spire_server_pod }}"
+        command: ["/opt/spire/bin/spire-server", "entry", "show", "-output", "json"]
+      register: existing_entries_raw
+
+    - name: Parse existing entries
+      ansible.builtin.set_fact:
+        existing_entries: "{{ existing_entries_raw.stdout | from_json }}"
+
+    - name: Check if KBS entry exists
+      ansible.builtin.set_fact:
+        kbs_entry_exists: >-
+          {{ existing_entries.entries | default([]) |
+             selectattr('spiffe_id.path', 'equalto',
+               kbs_spiffe_id | replace('spiffe://' + trust_domain, '')) |
+             list | length > 0 }}
+
+    - name: Create KBS workload entry
+      when: not kbs_entry_exists
+      kubernetes.core.k8s_exec:
+        namespace: "{{ spire_namespace }}"
+        pod: "{{ spire_server_pod }}"
+        command:
+          - "/opt/spire/bin/spire-server"
+          - "entry"
+          - "create"
+          - "-parentID"
+          - "spiffe://{{ trust_domain }}/spire/agent/k8s_psat/{{ cluster_name | default('hub') }}/{{ lookup('kubernetes.core.k8s', kind='Node', namespace='', label_selector='node-role.kubernetes.io/worker').metadata.name | default('placeholder') }}"
+          - "-spiffeID"
+          - "{{ kbs_spiffe_id }}"
+          - "-selector"
+          - "k8s:ns:trustee-operator-system"
+          - "-selector"
+          - "k8s:sa:trustee-sa"
+      register: kbs_entry_result
+      ignore_errors: true
+
+    - name: Display KBS entry creation result
+      ansible.builtin.debug:
+        msg: "KBS entry: {{ kbs_entry_result.stdout | default(kbs_entry_result.msg | default('already exists')) }}"
+
+    - name: Check if CoCo workload entry exists
+      ansible.builtin.set_fact:
+        coco_entry_exists: >-
+          {{ existing_entries.entries | default([]) |
+             selectattr('spiffe_id.path', 'equalto',
+               coco_workload_spiffe_id | replace('spiffe://' + trust_domain, '')) |
+             list | length > 0 }}
+
+    - name: Create CoCo workload entry (delegated from KBS)
+      when: not coco_entry_exists
+      kubernetes.core.k8s_exec:
+        namespace: "{{ spire_namespace }}"
+        pod: "{{ spire_server_pod }}"
+        command:
+          - "/opt/spire/bin/spire-server"
+          - "entry"
+          - "create"
+          - "-parentID"
+          - "{{ kbs_spiffe_id }}"
+          - "-spiffeID"
+          - "{{ coco_workload_spiffe_id }}"
+          - "-selector"
+          - "trustee:attested:true"
+          - "-selector"
+          - "k8s:ns:zero-trust-workload-identity-manager"
+          - "-selector"
+          - "k8s:pod-name:spire-agent-cc"
+      register: coco_entry_result
+      ignore_errors: true
+
+    - name: Display CoCo entry creation result
+      ansible.builtin.debug:
+        msg: "CoCo entry: {{ coco_entry_result.stdout | default(coco_entry_result.msg | default('already exists')) }}"
+
+    - name: Verify entries exist
+      kubernetes.core.k8s_exec:
+        namespace: "{{ spire_namespace }}"
+        pod: "{{ spire_server_pod }}"
+        command:
+          - "/opt/spire/bin/spire-server"
+          - "entry"
+          - "show"
+          - "-spiffeID"
+          - "{{ kbs_spiffe_id }}"
+      register: kbs_verify
+      ignore_errors: true
+
+    - name: Show registered entries
+      ansible.builtin.debug:
+        msg: |
+          KBS entry: {{ kbs_verify.stdout | default('not found') }}
+          Trust domain: {{ trust_domain }}
+          KBS SPIFFE-ID: {{ kbs_spiffe_id }}
+          CoCo SPIFFE-ID: {{ coco_workload_spiffe_id }}

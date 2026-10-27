@@ -96,7 +96,7 @@ clusterGroup:
     zero-trust-workload-identity-manager:
       name: openshift-zero-trust-workload-identity-manager
       namespace: zero-trust-workload-identity-manager
-      channel: tech-preview-v0.2
+      channel: stable-v1
       catalogSource: redhat-marketplace
     compliance-operator:
       name: compliance-operator
@@ -113,14 +113,29 @@ clusterGroup:
       source: redhat-operators
       channel: stable
       installPlanApproval: Manual
-      csv: sandboxed-containers-operator.v1.10.3
+      csv: sandboxed-containers-operator.v1.13.1
     trustee:
       name: trustee-operator
       namespace: trustee-operator-system
       source: redhat-operators
       channel: stable
       installPlanApproval: Manual
-      csv: trustee-operator.v0.4.2
+      csv: trustee-operator.v1.2.1
+      config:
+        # trustee-operator v1.2.1 default memory limit (128Mi) is insufficient
+        # with many ExternalSecrets in the namespace (secretToKbsConfigMapper fires per secret)
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 10m
+            memory: 256Mi
+        # KBS image with SPIRE Delegated Identity Plugin (PR #1581 from confidential-containers/trustee)
+        # Built from beraldoleal/trustee:spire-plugin (upstream/main + CI trigger)
+        env:
+          - name: KBS_IMAGE_NAME
+            value: "ghcr.io/beraldoleal/trustee/kbs:spire-plugin"
     # Storage and Registry operator subscriptions
     # COMMENTED OUT: Uncomment to enable integrated Quay registry
     # ODF provides object storage backend (NooBaa) for Quay and RHTPA
@@ -364,12 +379,12 @@ clusterGroup:
       playbook: ansible/init-data-gzipper.yaml
       verbosity: -vvv
       timeout: 3600
-    - name: generate-certs
-      playbook: ansible/generate-certs.yaml
+    - name: configure-spire-admin-socket
+      playbook: ansible/configure-spire-admin-socket.yaml
       verbosity: -vvv
       timeout: 3600
-    - name: configure-spire-server-x509pop
-      playbook: ansible/configure-spire-server-x509pop.yaml
+    - name: register-spire-entries
+      playbook: ansible/register-spire-entries.yaml
       verbosity: -vvv
       timeout: 3600
   managedClusterGroups: {}
