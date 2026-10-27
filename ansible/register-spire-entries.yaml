@@ -25,20 +25,20 @@
     spire_server_pod_label: "app=spire-server"
 
   tasks:
-    - name: Get SpireServer CR for trust domain
+    - name: Get ZeroTrustWorkloadIdentityManager CR for trust domain
       kubernetes.core.k8s_info:
         api_version: operator.openshift.io/v1alpha1
-        kind: SpireServer
+        kind: ZeroTrustWorkloadIdentityManager
         name: cluster
         namespace: "{{ spire_namespace }}"
-      register: spire_server_cr
+      register: ztwim_cr
       retries: 30
       delay: 10
-      until: spire_server_cr.resources | length > 0
+      until: ztwim_cr.resources | length > 0
 
     - name: Extract trust domain
       ansible.builtin.set_fact:
-        trust_domain: "{{ spire_server_cr.resources[0].spec.trustDomain }}"
+        trust_domain: "{{ ztwim_cr.resources[0].spec.trustDomain }}"
 
     - name: Set SPIFFE IDs
       ansible.builtin.set_fact:
