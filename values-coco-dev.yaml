@@ -321,8 +321,8 @@ clusterGroup:
       name: trustee
       namespace: trustee-operator-system
       project: hub
-      repoURL: https://github.com/butler54/trustee-chart.git
-      targetRevision: dev/osc-1.13-upgrade
+      repoURL: https://github.com/beraldoleal/trustee-chart.git
+      targetRevision: spire-plugin
       path: .
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
