@@ -322,7 +322,6 @@ clusterGroup:
       namespace: trustee-operator-system
       project: hub
       chart: trustee
-      chartVersion: 0.1.*
       repoURL: https://github.com/beraldoleal/trustee-chart.git
       targetRevision: spire-plugin
       extraValueFiles:
