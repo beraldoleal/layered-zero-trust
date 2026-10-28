@@ -56,7 +56,22 @@
         path: "{{ gz_path }}"
       register: gz_slurped
 
-    - name: Create/update ConfigMap with gzipped+base64 content
+    - name: Get existing initdata ConfigMap
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig | default(omit) }}"
+        kind: ConfigMap
+        name: initdata
+        namespace: imperative
+      register: existing_initdata
+
+    - name: Check if initdata content changed
+      ansible.builtin.set_fact:
+        initdata_changed: >-
+          {{ existing_initdata.resources | length == 0 or
+             (existing_initdata.resources[0].data | default({})).INITDATA | default('') != gz_slurped.content }}
+
+    - name: Create/update ConfigMap with gzipped+base64 content (only if changed)
+      when: initdata_changed
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig | default(omit) }}"
         state: present

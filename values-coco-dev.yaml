@@ -341,6 +341,11 @@ clusterGroup:
       project: hub
       chart: sandboxed-policies
       chartVersion: 0.0.*
+      repoURL: https://github.com/beraldoleal/sandboxed-policies-chart.git
+      targetRevision: main
+      overrides:
+        - name: global.coco.azure.peerPodsLimitPerNode
+          value: "2"
     hello-coco:
       name: hello-coco
       namespace: zero-trust-workload-identity-manager
