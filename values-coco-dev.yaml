@@ -340,9 +340,8 @@ clusterGroup:
       namespace: openshift-sandboxed-containers-operator
       project: hub
       chart: sandboxed-policies
-      chartVersion: 0.0.*
-      repoURL: https://github.com/beraldoleal/sandboxed-policies-chart.git
-      targetRevision: main
+      chartVersion: 0.0.1
+      repoURL: https://beraldoleal.github.io/sandboxed-policies-chart/
       overrides:
         - name: global.coco.azure.peerPodsLimitPerNode
           value: "2"
