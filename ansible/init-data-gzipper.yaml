@@ -46,9 +46,9 @@
         mode: "0600"
 
 
-    - name: Gzip the rendered content
+    - name: Gzip the rendered content (deterministic - no timestamp in header)
       ansible.builtin.shell: |
-        gzip -c "{{ rendered_path }}" > "{{ gz_path }}"
+        gzip -cn "{{ rendered_path }}" > "{{ gz_path }}"
       changed_when: true
 
     - name: Read gzip as base64
