@@ -122,8 +122,6 @@ clusterGroup:
       installPlanApproval: Manual
       csv: trustee-operator.v1.2.1
       config:
-        # trustee-operator v1.2.1 default memory limit (128Mi) is insufficient
-        # with many ExternalSecrets in the namespace (secretToKbsConfigMapper fires per secret)
         resources:
           limits:
             cpu: 500m
@@ -131,8 +129,6 @@ clusterGroup:
           requests:
             cpu: 10m
             memory: 256Mi
-        # KBS image with SPIRE Delegated Identity Plugin (PR #1581 from confidential-containers/trustee)
-        # Built from beraldoleal/trustee:spire-plugin (upstream/main + CI trigger)
         env:
           - name: KBS_IMAGE_NAME
             value: "ghcr.io/beraldoleal/trustee/kbs:spire-plugin"
@@ -322,10 +318,15 @@ clusterGroup:
       namespace: trustee-operator-system
       project: hub
       chart: trustee
-      chartVersion: spire-plugin
-      repoURL: https://github.com/beraldoleal/trustee-chart.git
+      chartVersion: 0.1.*
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
+      ignoreDifferences:
+        - kind: ConfigMap
+          name: resource-policy
+          namespace: trustee-operator-system
+          jsonPointers:
+            - /metadata/annotations
     sandbox:
       name: sandbox
       namespace: openshift-sandboxed-containers-operator
