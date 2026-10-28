@@ -335,6 +335,21 @@ clusterGroup:
           namespace: trustee-operator-system
           jsonPointers:
             - /spec/kbsResourcePolicyConfigMapName
+    trustee-migration-fix:
+      name: trustee-migration-fix
+      namespace: trustee-operator-system
+      project: hub
+      path: charts/trustee-migration-fix
+      annotations:
+        argocd.argoproj.io/sync-wave: "5"
+      ignoreDifferences:
+        - kind: ConfigMap
+          name: resource-policy
+          namespace: trustee-operator-system
+          jsonPointers:
+            - /metadata/annotations
+      syncOptions:
+        - RespectIgnoreDifferences=true
     sandbox:
       name: sandbox
       namespace: openshift-sandboxed-containers-operator

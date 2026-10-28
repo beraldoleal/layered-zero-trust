@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resource-policy
+  namespace: trustee-operator-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+    kbs.confidentialcontainers.org/migrated-from-v1.1.0: v1.2.0
+data:
+  policy.rego: |
+    package policy
+    default allow = true

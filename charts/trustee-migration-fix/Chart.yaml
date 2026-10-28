@@ -1,0 +1,4 @@
+apiVersion: v2
+name: trustee-migration-fix
+description: Patches resource-policy ConfigMap with migration annotation for trustee-operator v1.2.1
+version: 0.1.0
