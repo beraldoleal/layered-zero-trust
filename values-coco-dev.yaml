@@ -318,7 +318,7 @@ clusterGroup:
       namespace: trustee-operator-system
       project: hub
       chart: trustee
-      chartVersion: 0.9.*
+      chartVersion: 0.9.0
       repoURL: oci://quay.io/validatedpatterns
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
