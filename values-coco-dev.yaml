@@ -318,39 +318,10 @@ clusterGroup:
       namespace: trustee-operator-system
       project: hub
       chart: trustee
-      chartVersion: 0.1.*
+      chartVersion: 0.9.*
+      repoURL: oci://quay.io/validatedpatterns
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
-      syncOptions:
-        - RespectIgnoreDifferences=true
-      ignoreDifferences:
-        - kind: ConfigMap
-          name: resource-policy
-          namespace: trustee-operator-system
-          jsonPointers:
-            - /metadata/annotations
-            - /data
-        - kind: KbsConfig
-          group: confidentialcontainers.org
-          name: kbsconfig
-          namespace: trustee-operator-system
-          jsonPointers:
-            - /spec/kbsResourcePolicyConfigMapName
-    trustee-migration-fix:
-      name: trustee-migration-fix
-      namespace: trustee-operator-system
-      project: hub
-      path: charts/trustee-migration-fix
-      annotations:
-        argocd.argoproj.io/sync-wave: "5"
-      ignoreDifferences:
-        - kind: ConfigMap
-          name: resource-policy
-          namespace: trustee-operator-system
-          jsonPointers:
-            - /metadata/annotations
-      syncOptions:
-        - RespectIgnoreDifferences=true
     sandbox:
       name: sandbox
       namespace: openshift-sandboxed-containers-operator
