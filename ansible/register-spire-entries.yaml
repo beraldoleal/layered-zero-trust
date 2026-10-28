@@ -22,7 +22,7 @@
   gather_facts: false
   vars:
     spire_namespace: "zero-trust-workload-identity-manager"
-    spire_server_pod_label: "app=spire-server"
+    spire_server_pod_label: "app.kubernetes.io/name=spire-server"
 
   tasks:
     - name: Get ZeroTrustWorkloadIdentityManager CR for trust domain
