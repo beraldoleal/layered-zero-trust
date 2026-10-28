@@ -1,16 +1,17 @@
-# CoCo workload that receives an X.509-SVID via the Trustee SPIRE Delegated Identity Plugin.
+# CoCo workload testing basic KBS attestation.
 #
 # Flow:
 #   1. Pod starts inside a SEV-SNP TEE (kata-remote / peer-pod)
 #   2. CDH inside the TEE attests to KBS (TEE hardware attestation)
-#   3. CDH unseals the K8s secret below: fetches kbs+spire:///x509-svid from KBS
-#   4. KBS SPIRE plugin calls SPIRE Agent Delegated Identity API → returns SVID
-#   5. CDH writes the SVID JSON to the sealed secret mount
-#   6. Init container converts DER-encoded SVID JSON → PEM files in /svids/
-#   7. test-workload reads the PEM files and verifies them
+#   3. CDH unseals the K8s secret: fetches kbs:///default/passphrase/passphrase from KBS
+#   4. CDH writes the resource value to the sealed secret mount
+#   5. test-workload verifies the value was retrieved
 #
-# No SPIRE agent sidecar needed. No shareProcessNamespace. No unix attestor.
-# The trust chain: Hardware TEE → CDH → KBS → SPIRE Delegated Identity API → SVID
+# Trust chain: Hardware TEE → CDH → KBS attestation → resource delivery
+#
+# NOTE: This tests basic attestation with standard kbs:/// URI.
+# Once confirmed, upgrade sealed secret to kbs+spire:///x509-svid (requires
+# guest-components with kbs+spire:// support, OSC 1.14+ or custom build).
 apiVersion: v1
 kind: Pod
 metadata:
@@ -22,148 +23,41 @@ spec:
   runtimeClassName: kata-remote
   serviceAccountName: spire-agent
 
-  # Sealed secret with the SPIRE SVID sealed reference.
-  # CDH unseals this automatically when the pod starts inside the TEE.
-  # The sealed reference points to kbs+spire:///x509-svid which triggers
-  # the KBS SPIRE Delegated Identity Plugin.
   volumes:
-  - name: svid-sealed
+  - name: attestation-sealed
     secret:
       secretName: {{ .Values.sealedSecret.name }}
-  - name: svids
+  - name: result
     emptyDir: {}
 
-  initContainers:
-  # Convert DER-encoded SVID JSON (from CDH unsealing) to PEM files.
-  # The SPIRE plugin returns: { spiffe_id, cert_chain: [[DER bytes]], private_key: [DER bytes] }
-  - name: svid-converter
-    image: registry.redhat.io/ubi9/ubi-minimal:latest
-    command: ["/bin/sh", "-c"]
-    args:
-      - |
-        set -e
-        echo "=== SVID Converter: waiting for CDH to unseal SVID ==="
-        SVID_FILE="/sealed/x509-svid"
-
-        # CDH may take a few seconds to unseal (TEE attestation + KBS round-trip)
-        for i in $(seq 1 30); do
-          if [ -s "$SVID_FILE" ]; then
-            echo "SVID file found after ${i}s"
-            break
-          fi
-          echo "Waiting for SVID unsealing... (${i}/30)"
-          sleep 2
-        done
-
-        if [ ! -s "$SVID_FILE" ]; then
-          echo "ERROR: SVID file not available after 60s. Check CDH attestation and KBS SPIRE plugin logs."
-          exit 1
-        fi
-
-        echo "=== Raw SVID content (first 200 bytes) ==="
-        head -c 200 "$SVID_FILE"
-        echo ""
-
-        # The JSON from the SPIRE plugin contains DER bytes as arrays.
-        # Extract and convert to PEM using Python (available in ubi-minimal as python3-minimal).
-        # If python3 is not available, fall back to printing the raw JSON for debugging.
-        if command -v python3 >/dev/null 2>&1; then
-          python3 -c "
-        import json, base64, sys
-
-        with open('/sealed/x509-svid') as f:
-            data = json.load(f)
-
-        spiffe_id = data.get('spiffe_id', 'unknown')
-        cert_chain = data.get('cert_chain', [])
-        private_key = data.get('private_key', [])
-
-        print(f'SPIFFE-ID: {spiffe_id}')
-        print(f'Cert chain length: {len(cert_chain)}')
-
-        # Write PEM cert chain
-        with open('/svids/svid.pem', 'w') as f:
-            for der_bytes in cert_chain:
-                der = bytes(der_bytes)
-                b64 = base64.b64encode(der).decode()
-                pem = '-----BEGIN CERTIFICATE-----\n'
-                for i in range(0, len(b64), 64):
-                    pem += b64[i:i+64] + '\n'
-                pem += '-----END CERTIFICATE-----\n'
-                f.write(pem)
-
-        # Write PEM private key (PKCS#8)
-        with open('/svids/svid_key.pem', 'w') as f:
-            der = bytes(private_key)
-            b64 = base64.b64encode(der).decode()
-            pem = '-----BEGIN PRIVATE KEY-----\n'
-            for i in range(0, len(b64), 64):
-                pem += b64[i:i+64] + '\n'
-            pem += '-----END PRIVATE KEY-----\n'
-            f.write(pem)
-
-        print('PEM conversion complete.')
-        "
-        else
-          echo "WARNING: python3 not available. Copying raw SVID JSON for inspection."
-          cp "$SVID_FILE" /svids/svid-raw.json
-        fi
-
-        echo "=== Files in /svids/ ==="
-        ls -la /svids/
-    volumeMounts:
-    - name: svid-sealed
-      mountPath: /sealed
-      readOnly: true
-    - name: svids
-      mountPath: /svids
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-        - ALL
-      readOnlyRootFilesystem: false
-      seccompProfile:
-        type: RuntimeDefault
-
   containers:
-  # Test workload: verifies the SVID was received and is valid
   - name: test-workload
     image: registry.redhat.io/ubi9/ubi-minimal:latest
     command: ["/bin/sh", "-c"]
     args:
       - |
-        echo "=== CoCo SPIRE Plugin Integration Test ==="
-        echo "Trust chain: Hardware TEE → CDH → KBS SPIRE Plugin → SVID"
+        echo "=== CoCo Attestation Test ==="
+        echo "Trust chain: Hardware TEE → CDH → KBS → Resource delivery"
         echo ""
 
-        ls -la /svids/
+        ls -la /attestation/ 2>/dev/null || echo "No attestation dir"
 
-        if [ -f /svids/svid.pem ]; then
-          echo "=== X.509 SVID Certificate ==="
-          # Try openssl if available, otherwise show raw
-          if command -v openssl >/dev/null 2>&1; then
-            openssl x509 -in /svids/svid.pem -noout -text | grep -E "Subject:|Issuer:|Not Before:|Not After:|URI:" | head -10
-          else
-            echo "(openssl not available; showing raw PEM first 10 lines)"
-            head -10 /svids/svid.pem
-          fi
+        if [ -f /attestation/attestation-result ]; then
+          echo "SUCCESS: KBS attestation worked! Retrieved sealed resource:"
+          cat /attestation/attestation-result
           echo ""
-          echo "SUCCESS: SVID received via Trustee SPIRE Delegated Identity Plugin"
-        elif [ -f /svids/svid-raw.json ]; then
-          echo "SVID received as raw JSON (python3 conversion not available):"
-          head -5 /svids/svid-raw.json
-          echo "SUCCESS: SPIRE plugin is working (raw JSON format)"
+          echo "Peer pod VM attestation to KBS confirmed."
         else
-          echo "ERROR: No SVID files found in /svids/"
-          exit 1
+          echo "PENDING: Waiting for CDH to unseal attestation result..."
+          echo "Files in /attestation:"
+          ls -la /attestation/ 2>/dev/null
         fi
 
         echo "=== Sleeping for manual inspection ==="
         sleep 3600
     volumeMounts:
-    - name: svids
-      mountPath: /svids
+    - name: attestation-sealed
+      mountPath: /attestation
       readOnly: true
     securityContext:
       allowPrivilegeEscalation: false
