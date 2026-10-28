@@ -329,6 +329,7 @@ clusterGroup:
           namespace: trustee-operator-system
           jsonPointers:
             - /metadata/annotations
+            - /data
         - kind: KbsConfig
           group: confidentialcontainers.org
           name: kbsconfig
