@@ -7,6 +7,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "10"
     kbs.confidentialcontainers.org/migrated-from-v1.1.0: v1.2.0
 data:
-  policy.rego: |
+  resource-policy.rego: |
     package policy
+    import rego.v1
     default allow = true
