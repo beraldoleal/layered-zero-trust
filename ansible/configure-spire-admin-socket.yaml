@@ -152,6 +152,17 @@
         ztwim_pods.resources | length > 0 and
         (ztwim_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0)
 
+    - name: Remove kbsResourcePolicyConfigMapName from KbsConfig
+      kubernetes.core.k8s_json_patch:
+        api_version: confidentialcontainers.org/v1alpha1
+        kind: KbsConfig
+        namespace: trustee-operator-system
+        name: kbsconfig
+        patch:
+          - op: remove
+            path: /spec/kbsResourcePolicyConfigMapName
+      ignore_errors: true
+
     - name: Verify admin socket directory is accessible
       kubernetes.core.k8s_exec:
         namespace: "{{ spire_namespace }}"
