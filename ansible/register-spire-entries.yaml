@@ -69,7 +69,12 @@
       kubernetes.core.k8s_exec:
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
-        command: ["/opt/spire/bin/spire-server", "entry", "show", "-output", "json"]
+        command:
+          - "/opt/spire/bin/spire-server"
+          - "entry"
+          - "show"
+          - "-output"
+          - "json"
       register: existing_entries_raw
 
     - name: Parse existing entries
