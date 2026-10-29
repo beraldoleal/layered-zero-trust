@@ -70,7 +70,7 @@
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
         command:
-          - "/opt/spire/bin/spire-server"
+          - "/spire-server"
           - "entry"
           - "show"
           - "-output"
@@ -95,7 +95,7 @@
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
         command:
-          - "/opt/spire/bin/spire-server"
+          - "/spire-server"
           - "entry"
           - "create"
           - "-parentID"
@@ -127,7 +127,7 @@
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
         command:
-          - "/opt/spire/bin/spire-server"
+          - "/spire-server"
           - "entry"
           - "create"
           - "-parentID"
@@ -152,7 +152,7 @@
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
         command:
-          - "/opt/spire/bin/spire-server"
+          - "/spire-server"
           - "entry"
           - "show"
           - "-spiffeID"
