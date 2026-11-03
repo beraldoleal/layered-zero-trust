@@ -3,7 +3,7 @@
 # use the external KBS route even for same-cluster deployments.
 # For multi-cluster deployments, this also points to the trusted cluster's KBS.
 
-algorithm = "sha384"
+algorithm = "sha256"
 version = "0.1.0"
 
 [data]
