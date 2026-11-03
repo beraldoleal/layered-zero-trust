@@ -94,8 +94,10 @@
           data:
             agent.conf: |
               {{ agent_conf | combine({
-                'admin_apis': [{'unix': {'socket_path': admin_socket_path}}],
-                'authorized_delegates': [kbs_spiffe_id]
+                'agent': agent_conf.agent | combine({
+                  'admin_socket_path': admin_socket_path,
+                  'authorized_delegates': [kbs_spiffe_id]
+                })
               }) | to_json(indent=2) }}
 
     - name: Wait for SPIRE Agent DaemonSet pods to be Ready
