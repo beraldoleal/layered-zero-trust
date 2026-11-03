@@ -28,13 +28,15 @@ kbs:
     attestedSelectorValue: "true"
 
   # Mount the SPIRE agent admin socket from the host into the KBS pod.
-  # The admin socket is created by the SPIRE agent at /tmp/spire-agent/public/admin.sock
-  # inside the container, which maps to host path /run/spire/agent-sockets/admin.sock.
-  # This reuses the existing SPIRE agent volume mount (no new volumes needed on agent side).
+  # The SPIRE agent creates the socket at /run/spire/admin/admin.sock inside its container,
+  # which maps to host path /run/spire/admin-socket/admin.sock.
+  # The spire-agent DaemonSet has a hostPath volume:
+  #   hostPath: /run/spire/admin-socket -> mountPath: /run/spire/admin (in spire-agent pod)
+  # KBS mounts the same host directory to access the socket.
   extraVolumes:
     - name: spire-agent-admin-socket
       hostPath:
-        path: "/run/spire/agent-sockets"
+        path: "/run/spire/admin-socket"
         type: "Directory"
   extraVolumeMounts:
     - name: spire-agent-admin-socket
