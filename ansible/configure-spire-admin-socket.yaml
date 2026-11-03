@@ -113,15 +113,15 @@
 
     - name: Restart SPIRE Agent DaemonSet to pick up new config
       when: not admin_already_configured
-      kubernetes.core.k8s:
-        state: present
-        definition:
-          apiVersion: apps/v1
-          kind: DaemonSet
-          metadata:
-            name: "{{ agent_daemonset_name }}"
-            namespace: "{{ spire_namespace }}"
-            annotations:
+      kubernetes.core.k8s_json_patch:
+        api_version: apps/v1
+        kind: DaemonSet
+        namespace: "{{ spire_namespace }}"
+        name: "{{ agent_daemonset_name }}"
+        patch:
+          - op: add
+            path: /spec/template/metadata/annotations
+            value:
               kubectl.kubernetes.io/restartedAt: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
 
     - name: Enable CREATE_ONLY_MODE on ZTWIM operator to prevent revert
@@ -163,11 +163,23 @@
             path: /spec/kbsResourcePolicyConfigMapName
       ignore_errors: true
 
+    - name: Get a SPIRE agent pod name for verification
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ spire_namespace }}"
+        label_selectors:
+          - "app.kubernetes.io/name=spire-agent"
+      register: spire_agent_pods
+
     - name: Verify admin socket directory is accessible
+      when: spire_agent_pods.resources | length > 0
       kubernetes.core.k8s_exec:
         namespace: "{{ spire_namespace }}"
-        pod: "{{ (agent_ds.resources[0].status | dict2items | first).value }}"
-        command: ["ls", "-la", "{{ admin_socket_dir }}"]
+        pod: "{{ spire_agent_pods.resources[0].metadata.name }}"
+        command:
+          - "ls"
+          - "-la"
+          - "{{ admin_socket_dir }}"
       register: socket_check
       ignore_errors: true
 
