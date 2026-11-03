@@ -321,8 +321,8 @@ clusterGroup:
       namespace: trustee-operator-system
       project: hub
       chart: trustee
-      chartVersion: 0.9.0
-      repoURL: oci://quay.io/validatedpatterns/trustee
+      chartVersion: 0.1.0
+      repoURL: https://beraldoleal.github.io/trustee-chart/
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
       syncOptions:
