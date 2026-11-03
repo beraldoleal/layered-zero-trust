@@ -322,6 +322,17 @@ clusterGroup:
       repoURL: oci://quay.io/validatedpatterns/trustee
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
+      syncOptions:
+        - RespectIgnoreDifferences=true
+        - SkipDryRunOnMissingResource=true
+      ignoreDifferences:
+        - group: ""
+          kind: ConfigMap
+          name: resource-policy
+          namespace: trustee-operator-system
+          jsonPointers:
+            - /metadata/annotations
+            - /data
     sandbox:
       name: sandbox
       namespace: openshift-sandboxed-containers-operator
