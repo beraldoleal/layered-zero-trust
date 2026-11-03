@@ -28,8 +28,8 @@
     # The SPIFFE-ID of the KBS workload entry (set by register-spire-entries.yaml)
     # Format: spiffe://<trust_domain>/ns/trustee-operator-system/sa/trustee-sa
     kbs_spiffe_id_prefix: "spiffe://"
-    admin_socket_dir: "/run/spire/agent/sockets/csi.spiffe.io/admin"
-    admin_socket_path: "{{ admin_socket_dir }}/admin.sock"
+    admin_socket_dir: "/tmp/spire-agent/public"
+    admin_socket_path: "{{ admin_socket_dir }}/admin.sock"  # maps to host /run/spire/agent-sockets/admin.sock
 
   tasks:
     - name: Get ZeroTrustWorkloadIdentityManager CR to determine trust domain

@@ -28,13 +28,13 @@ kbs:
     attestedSelectorValue: "true"
 
   # Mount the SPIRE agent admin socket from the host into the KBS pod.
-  # The admin socket is a Unix Domain Socket exposed by the SPIRE DaemonSet agent
-  # on each node. configure-spire-admin-socket.yaml enables this socket in the
-  # SpireAgent config. The KBS pod can run on any node since every node has an agent.
+  # The admin socket is created by the SPIRE agent at /tmp/spire-agent/public/admin.sock
+  # inside the container, which maps to host path /run/spire/agent-sockets/admin.sock.
+  # This reuses the existing SPIRE agent volume mount (no new volumes needed on agent side).
   extraVolumes:
     - name: spire-agent-admin-socket
       hostPath:
-        path: "/run/spire/agent/sockets/csi.spiffe.io/admin"
+        path: "/run/spire/agent-sockets"
         type: "Directory"
   extraVolumeMounts:
     - name: spire-agent-admin-socket
