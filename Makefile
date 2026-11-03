@@ -17,9 +17,14 @@ install: operator-deploy post-install ## installs the pattern and loads the secr
 
 .PHONY: post-install
 post-install: ## Post-install tasks
-	make load-secrets
+	make vault-init
 	make vault-config-jwt
+	make load-secrets
 	@echo "Done"
+
+.PHONY: vault-init
+vault-init: ## Initialize and unseal Vault (must run before vault-config-jwt and load-secrets)
+	common/scripts/vault-utils.sh vault_init $(NAME)
 
 .PHONY: test
 test:
