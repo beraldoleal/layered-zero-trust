@@ -209,3 +209,43 @@
     - name: Display socket check result
       ansible.builtin.debug:
         msg: "{{ socket_check.stdout | default('Could not check socket - pod exec may be restricted') }}"
+
+    - name: Wait for KBS deployment to exist
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        namespace: trustee-operator-system
+        name: trustee-deployment
+      register: kbs_deployment
+      retries: 30
+      delay: 10
+      until: kbs_deployment.resources | length > 0
+
+    - name: Check if KBS deployment already has admin socket volume
+      ansible.builtin.set_fact:
+        kbs_has_admin_volume: >-
+          {{ kbs_deployment.resources[0].spec.template.spec.volumes |
+             default([]) |
+             selectattr('name', 'equalto', 'spire-agent-admin-socket') |
+             list | length > 0 }}
+
+    - name: Patch KBS deployment with SPIRE admin socket volume
+      when: not kbs_has_admin_volume
+      kubernetes.core.k8s_json_patch:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: trustee-operator-system
+        name: trustee-deployment
+        patch:
+          - op: add
+            path: /spec/template/spec/volumes/-
+            value:
+              name: spire-agent-admin-socket
+              hostPath:
+                path: "/run/spire/admin-socket"
+                type: Directory
+          - op: add
+            path: /spec/template/spec/containers/0/volumeMounts/-
+            value:
+              name: spire-agent-admin-socket
+              mountPath: "/run/spire/sockets"
+              readOnly: true

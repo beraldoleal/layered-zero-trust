@@ -132,6 +132,8 @@ clusterGroup:
         env:
           - name: KBS_IMAGE_NAME
             value: "ghcr.io/beraldoleal/trustee/kbs:spire-plugin"
+          - name: CREATE_ONLY_MODE
+            value: "true"
     # Storage and Registry operator subscriptions
     # COMMENTED OUT: Uncomment to enable integrated Quay registry
     # ODF provides object storage backend (NooBaa) for Quay and RHTPA
