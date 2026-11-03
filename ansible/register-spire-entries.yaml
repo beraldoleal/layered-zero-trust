@@ -69,12 +69,7 @@
       kubernetes.core.k8s_exec:
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
-        command:
-          - "/spire-server"
-          - "entry"
-          - "show"
-          - "-output"
-          - "json"
+        command: "/spire-server entry show -output json"
       register: existing_entries_raw
 
     - name: Parse existing entries
@@ -89,23 +84,24 @@
                kbs_spiffe_id | replace('spiffe://' + trust_domain, '')) |
              list | length > 0 }}
 
+    - name: Get a worker node name for parent SPIFFE-ID
+      kubernetes.core.k8s_info:
+        kind: Node
+        label_selectors:
+          - "node-role.kubernetes.io/worker"
+      register: worker_nodes
+
     - name: Create KBS workload entry
       when: not kbs_entry_exists
       kubernetes.core.k8s_exec:
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
-        command:
-          - "/spire-server"
-          - "entry"
-          - "create"
-          - "-parentID"
-          - "spiffe://{{ trust_domain }}/spire/agent/k8s_psat/{{ cluster_name | default('hub') }}/{{ lookup('kubernetes.core.k8s', kind='Node', namespace='', label_selector='node-role.kubernetes.io/worker').metadata.name | default('placeholder') }}"
-          - "-spiffeID"
-          - "{{ kbs_spiffe_id }}"
-          - "-selector"
-          - "k8s:ns:trustee-operator-system"
-          - "-selector"
-          - "k8s:sa:trustee-sa"
+        command: >-
+          /spire-server entry create
+          -parentID spiffe://{{ trust_domain }}/spire/agent/k8s_psat/{{ cluster_name | default('hub') }}/{{ worker_nodes.resources[0].metadata.uid | default('placeholder') }}
+          -spiffeID {{ kbs_spiffe_id }}
+          -selector k8s:ns:trustee-operator-system
+          -selector k8s:sa:trustee-sa
       register: kbs_entry_result
       ignore_errors: true
 
@@ -126,20 +122,13 @@
       kubernetes.core.k8s_exec:
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
-        command:
-          - "/spire-server"
-          - "entry"
-          - "create"
-          - "-parentID"
-          - "{{ kbs_spiffe_id }}"
-          - "-spiffeID"
-          - "{{ coco_workload_spiffe_id }}"
-          - "-selector"
-          - "trustee:attested:true"
-          - "-selector"
-          - "k8s:ns:zero-trust-workload-identity-manager"
-          - "-selector"
-          - "k8s:pod-name:spire-agent-cc"
+        command: >-
+          /spire-server entry create
+          -parentID {{ kbs_spiffe_id }}
+          -spiffeID {{ coco_workload_spiffe_id }}
+          -selector trustee:attested:true
+          -selector k8s:ns:zero-trust-workload-identity-manager
+          -selector k8s:pod-name:spire-agent-cc
       register: coco_entry_result
       ignore_errors: true
 
@@ -151,12 +140,7 @@
       kubernetes.core.k8s_exec:
         namespace: "{{ spire_namespace }}"
         pod: "{{ spire_server_pod }}"
-        command:
-          - "/spire-server"
-          - "entry"
-          - "show"
-          - "-spiffeID"
-          - "{{ kbs_spiffe_id }}"
+        command: "/spire-server entry show -spiffeID {{ kbs_spiffe_id }}"
       register: kbs_verify
       ignore_errors: true
 
