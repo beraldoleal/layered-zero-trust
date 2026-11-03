@@ -75,7 +75,8 @@
         admin_already_configured: >-
           {{ (agent_conf.plugins.KeyManager | default([]) |
               selectattr('admin', 'defined') | list | length > 0) or
-             (agent_conf.admin_apis is defined) }}
+             (agent_conf.admin_apis is defined) or
+             (agent_conf.agent.admin_socket_path is defined) }}
 
     - name: Display current configuration status
       ansible.builtin.debug:
