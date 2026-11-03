@@ -4,7 +4,7 @@ global:
 
 spiffe:
   csi:
-    agentSocketPath: "/run/spire/agent-sockets/spire-agent.sock"
+    agentSocketPath: "/run/spire/agent-sockets"
 
 spire:
   trustDomain: "{{ .Values.global.localClusterDomain }}"
