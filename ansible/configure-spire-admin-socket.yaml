@@ -113,7 +113,28 @@
         agent_ds.resources[0].status.numberReady | default(0) ==
         agent_ds.resources[0].status.desiredNumberScheduled | default(1)
 
-    - name: Restart SPIRE Agent DaemonSet to pick up new config
+    - name: Add admin socket hostPath volume to SPIRE Agent DaemonSet
+      when: not admin_already_configured
+      kubernetes.core.k8s_json_patch:
+        api_version: apps/v1
+        kind: DaemonSet
+        namespace: "{{ spire_namespace }}"
+        name: "{{ agent_daemonset_name }}"
+        patch:
+          - op: add
+            path: /spec/template/spec/volumes/-
+            value:
+              name: spire-agent-admin-socket-dir
+              hostPath:
+                path: "{{ admin_socket_dir }}"
+                type: DirectoryOrCreate
+          - op: add
+            path: /spec/template/spec/containers/0/volumeMounts/-
+            value:
+              name: spire-agent-admin-socket-dir
+              mountPath: "{{ admin_socket_dir }}"
+
+    - name: Restart SPIRE Agent DaemonSet to pick up new config and volume
       when: not admin_already_configured
       kubernetes.core.k8s_json_patch:
         api_version: apps/v1
