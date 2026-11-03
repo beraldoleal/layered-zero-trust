@@ -14,6 +14,8 @@ kbs:
       key: "secret/data/hub/kbsres1"
     - name: "passphrase"
       key: "secret/data/hub/passphrase"
+    - name: "credential"
+      key: "secret/data/hub/credential"
 
   # SPIRE Delegated Identity Plugin configuration
   # KBS uses the admin socket to call SPIRE's Delegated Identity API on behalf of
