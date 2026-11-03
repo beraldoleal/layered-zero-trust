@@ -321,7 +321,7 @@ clusterGroup:
       namespace: trustee-operator-system
       project: hub
       chart: trustee
-      chartVersion: 0.1.1
+      chartVersion: 0.1.2
       repoURL: https://beraldoleal.github.io/trustee-chart/
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
