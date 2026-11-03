@@ -319,7 +319,7 @@ clusterGroup:
       project: hub
       chart: trustee
       chartVersion: 0.9.0
-      repoURL: oci://quay.io/validatedpatterns
+      repoURL: oci://quay.io/validatedpatterns/trustee
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
     sandbox:
