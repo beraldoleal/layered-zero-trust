@@ -22,6 +22,11 @@ cert = """
 "cdh.toml"  = '''
 socket = 'unix:///run/confidential-containers/cdh.sock'
 
+# Test-only: sealed secrets use a fake JWS (unsigned) — skip verification so
+# the vault unseal flow can be exercised. For production, sign with ES256
+# and provision the public JWK to KBS (kid = resource URI).
+skip_sealed_secret_verification = true
+
 [[credentials]]
 path = "/run/confidential-containers/cdh/kbs/svid/x509-svid"
 resource_uri = "kbs+spire:///x509-svid"
