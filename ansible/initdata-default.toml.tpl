@@ -21,7 +21,10 @@ cert = """
 
 "cdh.toml"  = '''
 socket = 'unix:///run/confidential-containers/cdh.sock'
-credentials = []
+
+[[credentials]]
+path = "/run/confidential-containers/cdh/kbs/svid/x509-svid"
+resource_uri = "kbs+spire:///x509-svid"
 
 [kbc]
 name = "cc_kbc"
