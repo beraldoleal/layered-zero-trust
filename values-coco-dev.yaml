@@ -110,10 +110,12 @@ clusterGroup:
     sandboxed:
       name: sandboxed-containers-operator
       namespace: openshift-sandboxed-containers-operator
-      source: redhat-operators
+      # brew-catalog: OSC test FBC (Konflux tenant) for 1.14 candidate testing.
+      # CatalogSource + ImageDigestMirrorSet created out-of-band; see UPGRADE-114-NOTES.md
+      source: brew-catalog
       channel: stable
       installPlanApproval: Manual
-      csv: sandboxed-containers-operator.v1.13.1
+      csv: sandboxed-containers-operator.v1.14.0
     trustee:
       name: trustee-operator
       namespace: trustee-operator-system
